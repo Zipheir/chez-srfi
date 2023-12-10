@@ -38,9 +38,17 @@
 
 (import (rnrs base (6))
         (rnrs control (6))
+        (only (rnrs io ports (6)) eof-object)
+        (rnrs records syntactic (6))
+        (rnrs mutable-strings (6))
         (only (srfi :1) reduce unfold xcons every concatenate)
-        (only (srfi :133) vector-unfold)
+        (only (srfi :133 vectors) vector-unfold string->vector
+                                  vector-copy)
         (srfi :145))
+
+;;; R7RS shim
+(define (exact-integer? x)
+  (and (integer? x) (exact? x)))
 
 (define (exact-natural? x)
   (and (exact-integer? x) (not (negative? x))))
@@ -57,13 +65,12 @@
 
 (define (sum ns) (reduce + 0 ns))
 
-(define-record-type <range>
-  (raw-range start-index length indexer complexity)
-  range?
-  (start-index range-start-index)
-  (length range-length)
-  (indexer range-indexer)
-  (complexity range-complexity))
+(define-record-type (<range> raw-range range?)
+  (fields
+   (immutable start-index range-start-index)
+   (immutable length range-length)
+   (immutable indexer range-indexer)
+   (immutable complexity range-complexity)))
 
 ;; Maximum number of indexers to compose with range-reverse and
 ;; range-append before a range is expanded with vector-range.
