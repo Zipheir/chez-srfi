@@ -1,4 +1,4 @@
-(library (srfi 196)
+(library (srfi :196)
   (export range numeric-range vector-range string-range range-append
           iota-range range? range=? range-length range-ref range-first
           range-last subrange range-segment range-split-at range-take
