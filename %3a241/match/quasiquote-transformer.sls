@@ -29,55 +29,57 @@
   (import (rnrs (6))
           (srfi :241 match helpers))
 
-  (define quasiquote-transformer
-    (lambda (stx)
-      (define who 'quasiquote)
-      (define-record-type template-variable
-        (nongenerative) (sealed #t) (opaque #t)
-        (fields identifier expression))
-      (define quasiquote-syntax-violation
-        (lambda (subform msg)
-          (syntax-violation 'quasiquote msg stx subform)))
-      (define gen-output
-        (lambda (k tmpl lvl ell?)
-          (define quasiquote?
-            (lambda (x)
-              (and (identifier? x) (free-identifier=? x k))))
-          (define gen-ellipsis
-            (lambda (tmpl* out* vars* depth tmpl2)
-              (let f ([depth depth] [tmpl2 tmpl2])
-                (syntax-case tmpl2 ()
-                  [(ell . tmpl2)
-                   (ell? #'ell)
-                   (f (fx+ depth 1) #'tmpl2)]
-                  [tmpl2
-                   (let-values ([(out2 vars2)
-                                 (gen-output k #'tmpl2 0 ell?)])
-		     (for-each
-		      (lambda (tmpl vars)
-			(when (null? vars)
-			  (quasiquote-syntax-violation #'tmpl "no substitutions to repeat here")))
-		      tmpl* vars*)
-                     (with-syntax ([((tmp** ...) ...)
-                                    (map (lambda (vars)
-					   (map template-variable-identifier vars))
-					 vars*)]
-				   [(out1 ...) out*])
-                       (values #`(append (append-n-map #,depth
-						       (lambda (tmp** ...)
-							 out1)
-						       tmp** ...)
-					 ...
-                                         #,out2)
-                               (append (apply append vars*) vars2))))]))))
-	  (define gen-unquote*
-	    (lambda (expr*)
-              (with-syntax ([(tmp* ...) (generate-temporaries expr*)])
-		(values #'(tmp* ...)
-			(map (lambda (tmp expr)
-			       (list (make-template-variable tmp expr)))
-			     #'(tmp* ...) expr*)))))
-	  (syntax-case tmpl (unquote unquote-splicing) ;qq is K.
+  (define (quasiquote-transformer stx)
+    (define who 'quasiquote)
+
+    (define-record-type template-variable
+      (nongenerative) (sealed #t) (opaque #t)
+      (fields identifier expression))
+
+    (define (quasiquote-syntax-violation subform msg)
+      (syntax-violation 'quasiquote msg stx subform))
+
+    (define (gen-output k tmpl lvl ell?)
+      (define (quasiquote? x)
+        (and (identifier? x) (free-identifier=? x k)))
+
+      (define (gen-ellipsis tmpl* out* vars* depth tmpl2)
+        (let loop ([depth depth] [tmpl2 tmpl2])
+          (syntax-case tmpl2 ()
+            [(ell . tmpl2)
+             (ell? #'ell)
+             (loop (+ depth 1) #'tmpl2)]
+            [tmpl2
+             (let-values ([(out2 vars2)
+                           (gen-output k #'tmpl2 0 ell?)])
+               (for-each
+                (lambda (tmpl vars)
+                  (when (null? vars)
+                    (quasiquote-syntax-violation
+                     #'tmpl
+                     "no substitutions to repeat here")))
+                tmpl* vars*)
+               (with-syntax ([((tmp** ...) ...)
+                              (map (lambda (vars)
+                                     (map template-variable-identifier vars))
+                                   vars*)]
+                             [(out1 ...) out*])
+                 (values #`(append (append-n-map #,depth
+                                                 (lambda (tmp** ...)
+                                                   out1)
+                                                 tmp** ...)
+                                   ...
+                                   #,out2)
+                         (append (apply append vars*) vars2))))])))
+
+          (define (gen-unquote* expr*)
+            (with-syntax ([(tmp* ...) (generate-temporaries expr*)])
+              (values #'(tmp* ...)
+                      (map (lambda (tmp expr)
+                             (list (make-template-variable tmp expr)))
+                           #'(tmp* ...) expr*))))
+
+          (syntax-case tmpl (unquote unquote-splicing) ;qq is K.
             ;; (<ellipsis> <template>)
             [(ell tmpl)
              (ell? #'ell)
@@ -85,7 +87,7 @@
             ;; (quasiquote <template>)
             [`tmpl
              (quasiquote? #'quasiquote)
-             (let-values ([(out vars) (gen-output k #'tmpl (fx+ lvl 1) ell?)])
+             (let-values ([(out vars) (gen-output k #'tmpl (+ lvl 1) ell?)])
                (if (null? vars)
                    (values #'`tmpl
                            '())
@@ -93,29 +95,29 @@
                            vars)))]
             ;; (unquote <template>)
             [,expr
-             (fxzero? lvl)
+             (zero? lvl)
              (with-syntax ([(tmp) (generate-temporaries '(tmp))])
                (values #'tmp (list (make-template-variable #'tmp #'expr))))]
             [,tmpl
              (let-values ([(out vars)
-                           (gen-output k #'tmpl (fx- lvl 1) ell?)])
+                           (gen-output k #'tmpl (- lvl 1) ell?)])
                (if (null? vars)
                    (values #'',tmpl '())
                    (values #`(list 'unquote #,out) vars)))]
             ;; ((unquote-splicing <template> ...) <ellipsis> . <template>)
-	    [((unquote-splicing expr ...) ell . tmpl2)
-	     (and (fxzero? lvl) (ell? #'ell))
+            [((unquote-splicing expr ...) ell . tmpl2)
+             (and (zero? lvl) (ell? #'ell))
              (let-values ([(out* vars*)
-			   (gen-unquote* #'(expr ...))])
-	       (gen-ellipsis #'(expr ...) out* vars* 1 #'tmpl2))]
+                           (gen-unquote* #'(expr ...))])
+               (gen-ellipsis #'(expr ...) out* vars* 1 #'tmpl2))]
             ;; (<template> <ellipsis> . <template>)
-	    [((unquote expr ...) ell . tmpl2)
-	     (and (fxzero? lvl) (ell? #'ell))
+            [((unquote expr ...) ell . tmpl2)
+             (and (zero? lvl) (ell? #'ell))
              (let-values ([(out* vars*)
-			   (gen-unquote* #'(expr ...))])
-	       (gen-ellipsis #'(expr ...) out* vars* 0 #'tmpl2))]
+                           (gen-unquote* #'(expr ...))])
+               (gen-ellipsis #'(expr ...) out* vars* 0 #'tmpl2))]
             [(tmpl1 ell . tmpl2)
-             (and (fxzero? lvl) (ell? #'ell))
+             (and (zero? lvl) (ell? #'ell))
              (let-values ([(out1 vars1)
                            (gen-output k #'tmpl1 0 ell?)])
                (gen-ellipsis #'(tmpl1) (list out1) (list vars1) 0 #'tmpl2))]
@@ -123,7 +125,7 @@
             [((unquote tmpl1 ...) . tmpl2)
              (let-values ([(out vars)
                            (gen-output k #'tmpl2 lvl ell?)])
-               (if (fxzero? lvl)
+               (if (zero? lvl)
                    (with-syntax ([(tmp ...)
                                   (generate-temporaries #'(tmpl1 ...))])
                      (values #`(cons* tmp ... #,out)
@@ -131,7 +133,7 @@
                               (map make-template-variable #'(tmp ...) #'(tmpl1 ...))
                               vars)))
                    (let-values ([(out* vars*)
-                                 (gen-output* k #'(tmpl1 ...) (fx- lvl 1) ell?)])
+                                 (gen-output* k #'(tmpl1 ...) (- lvl 1) ell?)])
                      (if (and (null? vars)
                               (null? vars*))
                          (values #''((unquote-splicing tmpl1 ...) . tmpl2)
@@ -144,7 +146,7 @@
              ;; TODO: Use gen-ellipsis.
              (let-values ([(out vars)
                            (gen-output k #'tmpl2 lvl ell?)])
-               (if (fxzero? lvl)
+               (if (zero? lvl)
                    (with-syntax ([(tmp ...)
                                   (generate-temporaries #'(tmpl1 ...))])
                      (values #`(append tmp ... #,out)
@@ -152,7 +154,7 @@
                               (map make-template-variable #'(tmp ...) #'(tmpl1 ...))
                               vars)))
                    (let-values ([(out* vars*)
-                                 (gen-output* k #'(tmpl1 ...) (fx- lvl 1) ell?)])
+                                 (gen-output* k #'(tmpl1 ...) (- lvl 1) ell?)])
                      (if (and (null? vars)
                               (null? vars*))
                          (values #''((unquote-splicing tmpl1 ...) . tmpl2)
@@ -180,16 +182,17 @@
                    (values #`(list->vector #,out) vars)))]
             ;; <constant>
             [constant
-             (values #''constant '())])))
-      (define gen-output*
-        (lambda (k tmpl* lvl ell?)
-          (let f ([tmpl* tmpl*] [out* '()] [vars* '()])
-            (if (null? tmpl*)
-                (values (reverse out*) vars*)
-                (let ([tmpl (car tmpl*)]
-                      [tmpl* (cdr tmpl*)])
-                  (let-values ([(out vars) (gen-output k tmpl lvl ell?)])
-                    (f tmpl* (cons out out*) (append vars vars*))))))))
+             (values #''constant '())]))
+
+      (define (gen-output* k tmpl* lvl ell?)
+        (let loop ([tmpl* tmpl*] [out* '()] [vars* '()])
+          (if (null? tmpl*)
+              (values (reverse out*) vars*)
+              (let ([tmpl (car tmpl*)]
+                    [tmpl* (cdr tmpl*)])
+                (let-values ([(out vars) (gen-output k tmpl lvl ell?)])
+                  (loop tmpl* (cons out out*) (append vars vars*)))))))
+
       (syntax-case stx ()
         [(k tmpl)
          (let-values ([(out vars)
@@ -199,22 +202,17 @@
              #`(let ([x e] ...)
                  #,out)))]
         [_
-         (syntax-violation who "invalid syntax" stx)])))
+         (syntax-violation who "invalid syntax" stx)]))
 
-  (define append-n-map
-    (lambda (n proc . arg*)
-      (let f ([n n] [arg* arg*])
-        (if (fxzero? n)
-            (apply map proc arg*)
-            (let ([n (fx- n 1)])
-              (apply append
-                     (apply map
-                            (lambda arg*
-                              (f n arg*))
-                            arg*)))))))
+  (define (append-n-map n proc . arg*)
+    (let loop ([n n] [arg* arg*])
+      (if (zero? n)
+          (apply map proc arg*)
+          (let ([n (- n 1)])
+            (apply append
+                   (apply map
+                          (lambda arg*
+                            (loop n arg*))
+                          arg*))))))
 
   )
-
-;; Local Variables:
-;; mode: scheme
-;; End:

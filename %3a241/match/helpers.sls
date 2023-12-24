@@ -23,38 +23,35 @@
 ;; SOFTWARE.
 
 (library (srfi :241 match helpers)
-  (export ellipsis? length+ split-at)
+  (export ellipsis? underscore? length+ split-at)
   (import (rnrs))
 
-  (define ellipsis?
-    (lambda (x)
-      (and (identifier? x)
-	   (free-identifier=? x #'(... ...)))))
+  (define (ellipsis? x)
+    (and (identifier? x)
+         (free-identifier=? x #'(... ...))))
 
-    (define length+
-    (lambda (x)
-      (let f ([x x] [y x] [n 0])
-        (if (pair? x)
-            (let ([x (cdr x)]
-                  [n (fx+ n 1)])
-              (if (pair? x)
-                  (let ([x (cdr x)]
-                        [y (cdr y)]
-                        [n (fx+ n 1)])
-                    (and (not (eq? x y))
-                         (f x y n)))
-                  n))
-            n))))
+  (define (underscore? x)
+    (and (identifier? x)
+         (free-identifier=? x #'_)))
 
-  (define split-at
-    (lambda (ls k)
-      (let f ([ls ls] [k k])
-        (if (fxzero? k)
-            (values '() ls)
-            (let-values ([(ls1 ls2)
-                          (f (cdr ls) (fx- k 1))])
-              (values (cons (car ls) ls1) ls2)))))))
+  (define (length+ x)
+    (let f ([x x] [y x] [n 0])
+      (if (pair? x)
+          (let ([x (cdr x)]
+                [n (+ n 1)])
+            (if (pair? x)
+                (let ([x (cdr x)]
+                      [y (cdr y)]
+                      [n (+ n 1)])
+                  (and (not (eq? x y))
+                       (f x y n)))
+                n))
+          n)))
 
-;; Local Variables:
-;; mode: scheme
-;; End:
+  (define (split-at ls k)
+    (let f ([ls ls] [k k])
+      (if (zero? k)
+          (values '() ls)
+          (let-values ([(ls1 ls2)
+                        (f (cdr ls) (- k 1))])
+            (values (cons (car ls) ls1) ls2))))))
