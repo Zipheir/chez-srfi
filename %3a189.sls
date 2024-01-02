@@ -55,7 +55,7 @@
   (import (rnrs base (6))
           (rnrs control (6))
           (rnrs records syntactic (6))
-          (only (srfi :1 lists) list= every)
+          (only (srfi :1 lists) list= every list-copy)
           (srfi :145 assumptions)
           (only (chezscheme) include))
   (include ":189/189.scm"))
