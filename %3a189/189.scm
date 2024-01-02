@@ -21,18 +21,18 @@
 
 (define-record-type (<just> raw-just just?)
   (nongenerative) (sealed #t) (opaque #t)
-  (fields objs))
+  (fields (immutable objs just-objs)))
 
 (define-record-type (<nothing> make-nothing nothing?)
   (nongenerative) (sealed #t) (opaque #t))
 
 (define-record-type (<left> raw-left left?)
   (nongenerative) (sealed #t) (opaque #t)
-  (fields objs left-objs))
+  (fields (immutable objs left-objs)))
 
 (define-record-type (<right> raw-right right?)
   (nongenerative) (sealed #t) (opaque #t)
-  (fields objs right-objs))
+  (fields (immutable objs right-objs)))
 
 (define nothing-obj (make-nothing))
 
