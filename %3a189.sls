@@ -52,7 +52,9 @@
           maybe-and maybe-or maybe-let* either-and either-or either-let*
           maybe-let*-values either-let*-values
           maybe-if)
-  (import (rnrs base (6))
+  (import (except (rnrs base (6)) error)
+          (rename (only (rnrs base (6)) error)
+            (error r6rs:error))
           (rnrs control (6))
           (rnrs records syntactic (6))
           (rnrs exceptions (6))
@@ -60,4 +62,9 @@
           (only (srfi :1 lists) find list= every list-copy)
           (srfi :145 assumptions)
           (only (chezscheme) include))
+
+  ;;; R7RS shim
+  (define (error message . irritants)
+    (apply r6rs:error #f message irritants))
+
   (include ":189/189.scm"))
